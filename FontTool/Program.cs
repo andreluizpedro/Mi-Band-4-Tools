@@ -10,11 +10,9 @@ namespace FontTool
             if (args.Length < 2)
             {
                 Help();
-#if DEBUG
-                Packer.Pack(@"C:\Users\Jakob\Desktop\new.ft", 2);
-#endif
                 return;
             }
+
             switch (args[0])
             {
                 case "pack":
