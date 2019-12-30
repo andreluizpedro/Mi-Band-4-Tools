@@ -9,7 +9,7 @@ Supports:
 * NEZK 2
 
 ### Unpacking
-- - -
+
 Unpacks the font into ```bmp-24\``` and ```bmp-16\``` in the parent directory of the font file.
 <br>
 ```
@@ -17,7 +17,7 @@ Unpacks the font into ```bmp-24\``` and ```bmp-16\``` in the parent directory of
 ```
 
 ### Packing
-- - -
+
 Packs the font from ```bmp-24\``` and ```bmp-16\``` to the new file path.
 ```
 > FontTool.exe pack <version> <path_to_new_file>
