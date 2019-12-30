@@ -11,7 +11,7 @@ namespace FontTool
 {
     class Packer
     {
-        private const string font_24_folder = "bmp-24", font_16_folder = "bmp-latin";
+        private const string font_24_folder = "bmp-24", font_16_folder = "bmp-16";
 
         public static void Unpack(string font_path)
         {
