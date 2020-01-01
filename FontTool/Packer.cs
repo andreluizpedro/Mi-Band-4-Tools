@@ -370,8 +370,8 @@ namespace FontTool
                     if (r_start % 10 == 0)
                         Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
 
-                    buffer = readBytes(fs, char_size);
-                    char_width = fs.ReadByte();
+                    buffer = readBytes(fs, char_size + 1);
+                    char_width = buffer.Last();
 
                     bmp = new Bitmap(width, height, PixelFormat.Format1bppIndexed);
                     unsafe
