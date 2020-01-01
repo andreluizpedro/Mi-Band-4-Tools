@@ -17,7 +17,7 @@ namespace FontTool
 
         public static void Unpack(string font_path)
         {
-            Console.WriteLine($"\nUnpacking {font_path}\n");
+            Console.WriteLine("\nUnpacking {0}\n", font_path);
 
             // Get directory path
             string dir = Directory.GetParent(font_path).FullName;
@@ -33,7 +33,7 @@ namespace FontTool
 
                     // Font Version and Flags
                     fontVer = header[0x04];
-                    Console.WriteLine($"Font Version:  {fontVer}");
+                    Console.WriteLine("Font Version:  {0}", fontVer);
 
                     switch (fontVer)
                     {
@@ -46,7 +46,7 @@ namespace FontTool
 
                     // Offset to 16px fonts
                     offset = (uint)((header[0x1F] << 24) + (header[0x1E] << 16) + (header[0x1D] << 8) + header[0x1C]);
-                    Console.WriteLine($"Offset:        0x{offset.ToString("X2")}");
+                    Console.WriteLine("Offset:        0x{0:X2}", offset);
                 }
                 #endregion
 
@@ -81,7 +81,7 @@ namespace FontTool
                     throw new InvalidDataException("Invalid version / version not supported");
             }
 
-            Console.WriteLine($"\nPacking {new_font_path}\n");
+            Console.WriteLine("\nPacking {0}\n", new_font_path);
 
             // Get directory path
             string dir = Directory.GetParent(new_font_path).FullName;
@@ -121,15 +121,16 @@ namespace FontTool
             Console.WriteLine("Generating ranges...");
             byte[] ranges = GenerateRanges(files);
             int range_count = ranges.Length / 6;
-            Console.WriteLine($"Generated {range_count} ranges");
+            Console.WriteLine("Generated {0} ranges", range_count);
             fs.WriteByte((byte)range_count);
             fs.WriteByte((byte)(range_count >> 8));
             fs.Write(ranges);
             #endregion
 
             #region Write BMP
-            int width_bytes = width / 8;
-            int char_size = width_bytes * height;
+            int width_bytes = width / 8,
+                char_size = width_bytes * height,
+                char_count = 0;
 
             byte[] char_data = new byte[char_size];
 
@@ -138,10 +139,10 @@ namespace FontTool
                 r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
                 r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
 
-                for (; r_start <= r_end; ++r_start)
+                for (; r_start <= r_end; ++r_start, ++char_count)
                 {
                     if (r_start % 10 == 0)
-                        Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
+                        Console.Write("Range: {0}/{1}    Char: {2}/{3}\r", range_nr, range_count, r_start, r_end);
 
                     #region Read BMP
                     Bitmap bmpi = new Bitmap($@"{font_folder}\{r_start.ToString("x4")}.bmp");
@@ -170,6 +171,7 @@ namespace FontTool
                 }
             }
             Console.Write(new string(' ', Console.WindowWidth));
+            Console.WriteLine("\rPacked {0} characters", char_count);
             #endregion
 
             // Returns bytes written and restores filestream position
@@ -189,15 +191,16 @@ namespace FontTool
             Console.WriteLine("Generating ranges...");
             byte[] ranges = GenerateRanges(files);
             int range_count = ranges.Length / 6;
-            Console.WriteLine($"Generated {range_count} ranges");
+            Console.WriteLine("Generated {0} ranges", range_count);
             fs.WriteByte((byte)range_count);
             fs.WriteByte((byte)(range_count >> 8));
             fs.Write(ranges);
             #endregion
 
             #region Write BMP
-            int width_bytes = width / 8;
-            int char_size = width_bytes * height;
+            int width_bytes = width / 8,
+                char_size = width_bytes * height,
+                char_count = 0;
 
             byte[] char_data = new byte[char_size];
 
@@ -206,10 +209,10 @@ namespace FontTool
                 r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
                 r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
 
-                for (string filename; r_start <= r_end; ++r_start, ++i)
+                for (string filename; r_start <= r_end; ++r_start, ++i, ++char_count)
                 {
                     if (r_start % 10 == 0)
-                        Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
+                        Console.Write("Range: {0}/{1}    Char: {2}/{3}\r", range_nr, range_count, r_start, r_end);
 
                     // filename = Directory.GetFiles(font_folder, @$"{r_start.ToString("x4")}??.bmp")[0];
                     filename = files[i];
@@ -244,6 +247,7 @@ namespace FontTool
                 }
             }
             Console.Write(new string(' ', Console.WindowWidth));
+            Console.WriteLine("\rPacked {0} characters", char_count);
             #endregion
 
             // Returns bytes written and restores filestream position
@@ -301,7 +305,8 @@ namespace FontTool
             int r_start, r_end, range_count = ranges.Length / 6;
 
             int width_bytes = width / 8,
-                char_size = width_bytes * height;
+                char_size = width_bytes * height,
+                char_count = 0;
 
             Bitmap bmp; BitmapData bmpData;
             for (int range_nr = 0; range_nr < range_count; ++range_nr)
@@ -309,10 +314,10 @@ namespace FontTool
                 r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
                 r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
 
-                for (; r_start <= r_end; ++r_start)
+                for (; r_start <= r_end; ++r_start, ++char_count)
                 {
                     if (r_start % 10 == 0)
-                        Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
+                        Console.Write("Range: {0}/{1}    Char: {2}/{3}\r", range_nr, range_count, r_start, r_end);
 
                     buffer = readBytes(fs, char_size);
 
@@ -335,6 +340,8 @@ namespace FontTool
                     bmp.Save(@$"{export_dir}\{r_start.ToString("x4")}.bmp");
                 }
             }
+            Console.Write(new string(' ', Console.WindowWidth));
+            Console.WriteLine("\rPacked {0} characters", char_count);
 
             // Returns bytes read and restores filestream position
             offset = (uint)fs.Position - offset;
@@ -357,6 +364,7 @@ namespace FontTool
 
             int width_bytes = width / 8,
                 char_size = width_bytes * height,
+                char_count = 0,
                 char_width;
 
             Bitmap bmp; BitmapData bmpData;
@@ -365,10 +373,10 @@ namespace FontTool
                 r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
                 r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
 
-                for (; r_start <= r_end; ++r_start)
+                for (; r_start <= r_end; ++r_start, ++char_count)
                 {
                     if (r_start % 10 == 0)
-                        Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
+                        Console.Write("Range: {0}/{1}    Char: {2}/{3}\r", range_nr, range_count, r_start, r_end);
 
                     buffer = readBytes(fs, char_size + 1);
                     char_width = buffer.Last();
@@ -392,6 +400,8 @@ namespace FontTool
                     bmp.Save(@$"{export_dir}\{r_start.ToString("x4")}{char_width.ToString("x2")}.bmp");
                 }
             }
+            Console.Write(new string(' ', Console.WindowWidth));
+            Console.WriteLine("\rPacked {0} characters", char_count);
 
             // Returns bytes read and restores filestream position
             offset = (uint)fs.Position - offset;
