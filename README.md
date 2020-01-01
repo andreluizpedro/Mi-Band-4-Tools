@@ -1,7 +1,9 @@
 # Mi Band 4 Tools
 
-## Font Tool v1.0
+## Font Tool v1.1
 
+**.NET Core 3 needed!**
+<br>
 For unpacking and re-packing .ft files.
 <br>
 Supports:
