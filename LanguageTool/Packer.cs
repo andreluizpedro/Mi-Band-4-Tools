@@ -15,6 +15,10 @@ namespace LanguageTool
             LanguageFile languageFile = LanguageFile.Parse(stm);
 
             File.WriteAllText($@"{output_folder}\header.json", languageFile.toJson());
+
+            foreach (Language language in languageFile.Languages)
+                if (language != null)
+                    language.exportAsTxt(@$"{output_folder}\{string.Concat(language.Name.Split(Path.GetInvalidFileNameChars()))}.txt");
         }
 
         public static void Pack()

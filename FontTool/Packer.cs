@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace FontTool
 {
-    class Packer
+    public class Packer
     {
         private const string font_24_folder = "bmp-24", font_16_folder = "bmp-16";
 
@@ -19,55 +19,70 @@ namespace FontTool
         {
             Console.WriteLine($"\nUnpacking {font_path}\n");
 
-            // Get directory path
             string dir = Directory.GetParent(font_path).FullName;
 
             using (FileStream fs = new FileStream(font_path, FileMode.Open, FileAccess.Read))
+                Unpack(fs, dir);
+        }
+
+        public static long Unpack(Stream stream, string output_dir)
+        {
+            long origin = stream.Position;
+
+            BinaryReader br = new BinaryReader(stream);
+
+            long offset;
+            byte fontVer;
+
+            #region Header (32 bytes)
             {
-                uint offset;
-                byte fontVer;
+                stream.Position = origin + 0x04;
+                fontVer = br.ReadByte();
+                Console.WriteLine($"Font Version:  {fontVer}");
 
-                #region Header (32 bytes)
-                {
-                    byte[] header = readBytes(fs, 32);
-
-                    // Font Version and Flags
-                    fontVer = header[0x04];
-                    Console.WriteLine($"Font Version:  {fontVer}");
-
-                    switch (fontVer)
-                    {
-                        case 1:
-                        case 2:
-                            break;
-                        default:
-                            throw new InvalidDataException("Invalid version / version not supported");
-                    }
-
-                    // Offset to 16px fonts
-                    offset = (uint)((header[0x1F] << 24) + (header[0x1E] << 16) + (header[0x1D] << 8) + header[0x1C]);
-                    Console.WriteLine($"Offset:        0x{offset.ToString("X2")}");
-                }
-                #endregion
-
-                #region Unpacking
                 switch (fontVer)
                 {
                     case 1:
-                        UnpackVariable(fs, 0x20, 24, 24, @$"{dir}\{font_24_folder}");
-                        if (offset != 0xFFFFFFFF)
-                            UnpackFixed(fs, 0x20 + offset, 16, 20, @$"{dir}\{font_16_folder}");
-                        break;
                     case 2:
-                        UnpackFixed(fs, 0x20, 24, 18, @$"{dir}\{font_24_folder}");
-                        if (offset != 0xFFFFFFFF)
-                            UnpackFixed(fs, 0x20 + offset, 16, 20, @$"{dir}\{font_16_folder}");
                         break;
                     default:
                         throw new InvalidDataException("Invalid version / version not supported");
                 }
-                #endregion
+
+                // Offset to 16px fonts
+                stream.Position = origin + 0x1C;
+                offset = br.ReadUInt32();
+                Console.WriteLine($"Offset:        0x{offset.ToString("X4")}");
             }
+            #endregion
+
+            #region Unpacking
+            switch (fontVer)
+            {
+                case 1:
+                    stream.Position = origin + 0x20;
+                    UnpackVariable(stream, 24, 24, @$"{output_dir}\{font_24_folder}");
+                    if (offset != 0xFFFFFFFF)
+                    {
+                        stream.Position = origin + 0x20 + offset;
+                        UnpackFixed(stream, 16, 20, @$"{output_dir}\{font_16_folder}");
+                    }
+                    break;
+                case 2:
+                    stream.Position = origin + 0x20;
+                    UnpackFixed(stream, 24, 18, @$"{output_dir}\{font_24_folder}");
+                    if (offset != 0xFFFFFFFF)
+                    {
+                        stream.Position = origin + 0x20 + offset;
+                        UnpackFixed(stream, 16, 20, @$"{output_dir}\{font_16_folder}");
+                    }
+                    break;
+                default:
+                    throw new InvalidDataException("Invalid version / version not supported");
+            }
+            #endregion
+
+            return stream.Position - origin;
         }
 
         public static void Pack(string new_font_path, byte font_ver)
@@ -88,7 +103,7 @@ namespace FontTool
 
             using (FileStream fs = new FileStream(new_font_path, FileMode.Create, FileAccess.Write))
             {
-                uint offset = 0;
+                long offset = 0;
                 byte[] header;
 
                 switch (font_ver)
@@ -110,10 +125,11 @@ namespace FontTool
         }
 
 
-        private static uint PackFixed(FileStream fs, uint offset, string font_folder, int width, int height)
+        private static long PackFixed(Stream stream, string font_folder, int width, int height)
         {
-            uint fsoldpos = (uint)fs.Position;
-            fs.Position = offset;
+            long origin = stream.Position;
+
+            BinaryWriter bw = new BinaryWriter(stream);
 
             string[] files = Directory.EnumerateFiles(font_folder).Where(fn => Regex.IsMatch(fn, @"\\[0-9a-fA-F]{4}.bmp$")).ToArray();
 
@@ -122,21 +138,22 @@ namespace FontTool
             byte[] ranges = GenerateRanges(files);
             int range_count = ranges.Length / 6;
             Console.WriteLine($"Generated {range_count} ranges");
-            fs.WriteByte((byte)range_count);
-            fs.WriteByte((byte)(range_count >> 8));
-            fs.Write(ranges);
+            bw.Write((ushort)range_count);
+            bw.Write(ranges);
             #endregion
 
             #region Write BMP
             int width_bytes = width / 8;
             int char_size = width_bytes * height;
 
-            byte[] char_data = new byte[char_size];
+            using BinaryReader rangesBR = new BinaryReader(new MemoryStream(ranges));
 
+            byte[] char_data = new byte[char_size];
             for (int range_nr = 0, r_start, r_end; range_nr < range_count; ++range_nr)
             {
-                r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
-                r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
+                r_start = rangesBR.ReadUInt16();
+                r_end = rangesBR.ReadUInt16();
+                rangesBR.BaseStream.Position += 2;
 
                 for (; r_start <= r_end; ++r_start)
                 {
@@ -166,22 +183,20 @@ namespace FontTool
                     }
                     #endregion
 
-                    fs.Write(char_data, 0, char_size);
+                    bw.Write(char_data);
                 }
             }
             Console.Write(new string(' ', Console.WindowWidth));
             #endregion
 
-            // Returns bytes written and restores filestream position
-            offset = (uint)fs.Position - offset;
-            fs.Position = fsoldpos;
-            return offset;
+            return stream.Position - origin;
         }
 
-        private static uint PackVariable(FileStream fs, uint offset, string font_folder, int width, int height)
+        private static long PackVariable(Stream stream, string font_folder, int width, int height)
         {
-            uint fsoldpos = (uint)fs.Position;
-            fs.Position = offset;
+            long origin = stream.Position;
+
+            BinaryWriter bw = new BinaryWriter(stream);
 
             string[] files = Directory.EnumerateFiles(font_folder).Where(fn => Regex.IsMatch(fn, @"\\[0-9a-fA-F]{6}.bmp$")).ToArray();
 
@@ -190,21 +205,22 @@ namespace FontTool
             byte[] ranges = GenerateRanges(files);
             int range_count = ranges.Length / 6;
             Console.WriteLine($"Generated {range_count} ranges");
-            fs.WriteByte((byte)range_count);
-            fs.WriteByte((byte)(range_count >> 8));
-            fs.Write(ranges);
+            bw.Write((ushort)range_count);
+            bw.Write(ranges);
             #endregion
 
             #region Write BMP
             int width_bytes = width / 8;
             int char_size = width_bytes * height;
 
-            byte[] char_data = new byte[char_size];
+            using BinaryReader rangesBR = new BinaryReader(new MemoryStream(ranges));
 
+            byte[] char_data = new byte[char_size];
             for (int range_nr = 0, i = 0, r_start, r_end; range_nr < range_count; ++range_nr)
             {
-                r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
-                r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
+                r_start = rangesBR.ReadUInt16();
+                r_end = rangesBR.ReadUInt16();
+                rangesBR.BaseStream.Position += 2;
 
                 for (string filename; r_start <= r_end; ++r_start, ++i)
                 {
@@ -239,17 +255,14 @@ namespace FontTool
                     }
                     #endregion
 
-                    fs.Write(char_data, 0, char_size);
-                    fs.WriteByte((byte)HexToInt(filename.Split('\\').Last().Substring(4, 2)));
+                    bw.Write(char_data);
+                    bw.Write((byte)HexToInt(filename.Split('\\').Last().Substring(4, 2)));
                 }
             }
             Console.Write(new string(' ', Console.WindowWidth));
             #endregion
 
-            // Returns bytes written and restores filestream position
-            offset = (uint)fs.Position - offset;
-            fs.Position = fsoldpos;
-            return offset;
+            return stream.Position - origin;
         }
 
         private static byte[] GenerateRanges(string[] files)
@@ -287,34 +300,36 @@ namespace FontTool
             return ranges.ToArray();
         }
 
-        private static uint UnpackFixed(FileStream fs, uint offset, int width, int height, string export_dir)
+        private static long UnpackFixed(Stream stream, int width, int height, string export_dir)
         {
-            uint fsoldpos = (uint)fs.Position;
-            fs.Position = offset;
+            long origin = stream.Position;
 
-            byte[] buffer;
+            BinaryReader br = new BinaryReader(stream);
 
             if (!Directory.Exists(export_dir))
                 Directory.CreateDirectory(export_dir);
 
-            byte[] ranges = ReadRanges(fs);
-            int r_start, r_end, range_count = ranges.Length / 6;
+            int r_start, r_end,
+                range_count = br.ReadUInt16();
+            using BinaryReader ranges = new BinaryReader(new MemoryStream(br.ReadBytes(range_count)));
 
             int width_bytes = width / 8,
                 char_size = width_bytes * height;
 
+            byte[] char_data;
             Bitmap bmp; BitmapData bmpData;
             for (int range_nr = 0; range_nr < range_count; ++range_nr)
             {
-                r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
-                r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
+                r_start = ranges.ReadUInt16();
+                r_end = ranges.ReadUInt16();
+                ranges.BaseStream.Position += 2;
 
                 for (; r_start <= r_end; ++r_start)
                 {
                     if (r_start % 10 == 0)
                         Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
 
-                    buffer = readBytes(fs, char_size);
+                    char_data = br.ReadBytes(char_size);
 
                     bmp = new Bitmap(width, height, PixelFormat.Format1bppIndexed);
                     unsafe
@@ -325,7 +340,7 @@ namespace FontTool
                         for (int y = 0, x; y < height; ++y)
                         {
                             for (x = 0; x < width_bytes; ++x)
-                                line[x] = buffer[width_bytes * y + x];
+                                line[x] = char_data[width_bytes * y + x];
 
                             line += bmpData.Stride;
                         }
@@ -336,42 +351,42 @@ namespace FontTool
                 }
             }
 
-            // Returns bytes read and restores filestream position
-            offset = (uint)fs.Position - offset;
-            fs.Position = fsoldpos;
-            return offset;
+            return stream.Position - origin;
         }
 
-        private static uint UnpackVariable(FileStream fs, uint offset, int width, int height, string export_dir)
+        private static long UnpackVariable(Stream stream, int width, int height, string export_dir)
         {
-            uint fsoldpos = (uint)fs.Position;
-            fs.Position = offset;
+            long origin = stream.Position;
 
-            byte[] buffer;
+            BinaryReader br = new BinaryReader(stream);
 
             if (!Directory.Exists(export_dir))
                 Directory.CreateDirectory(export_dir);
 
-            byte[] ranges = ReadRanges(fs);
-            int r_start, r_end, range_count = ranges.Length / 6;
+            int r_start, r_end,
+                range_count = br.ReadUInt16();
+
+            using BinaryReader ranges = new BinaryReader(new MemoryStream(br.ReadBytes(range_count * 6)));
 
             int width_bytes = width / 8,
                 char_size = width_bytes * height,
                 char_width;
 
+            byte[] char_data;
             Bitmap bmp; BitmapData bmpData;
             for (int range_nr = 0; range_nr < range_count; ++range_nr)
             {
-                r_start = (ranges[6 * range_nr + 1] << 8) + ranges[6 * range_nr];
-                r_end = (ranges[6 * range_nr + 3] << 8) + ranges[6 * range_nr + 2];
+                r_start = ranges.ReadUInt16();
+                r_end = ranges.ReadUInt16();
+                ranges.BaseStream.Position += 2;
 
                 for (; r_start <= r_end; ++r_start)
                 {
                     if (r_start % 10 == 0)
                         Console.Write($"Range: {range_nr}/{range_count}    Char: {r_start}/{r_end}\r");
 
-                    buffer = readBytes(fs, char_size);
-                    char_width = fs.ReadByte();
+                    char_data = br.ReadBytes(char_size);
+                    char_width = br.ReadByte();
 
                     bmp = new Bitmap(width, height, PixelFormat.Format1bppIndexed);
                     unsafe
@@ -382,7 +397,7 @@ namespace FontTool
                         for (int y = 0, x; y < height; ++y)
                         {
                             for (x = 0; x < width_bytes; ++x)
-                                line[x] = buffer[width_bytes * y + x];
+                                line[x] = char_data[width_bytes * y + x];
 
                             line += bmpData.Stride;
                         }
@@ -393,18 +408,7 @@ namespace FontTool
                 }
             }
 
-            // Returns bytes read and restores filestream position
-            offset = (uint)fs.Position - offset;
-            fs.Position = fsoldpos;
-            return offset;
-        }
-
-        private static byte[] ReadRanges(FileStream fs)
-        {
-            byte[] buffer = readBytes(fs, 2);
-            int ranges_count = (buffer[1] << 8) + buffer[0];
-
-            return readBytes(fs, ranges_count * 6);
+            return stream.Position - origin;
         }
 
         private static byte[] GenerateHeader(byte font_ver, uint offset_to_16px)
@@ -437,13 +441,6 @@ namespace FontTool
             header[0x1F] = (byte)(offset_to_16px >> 24);
 
             return header;
-        }
-
-        private static byte[] readBytes(FileStream fs, int count)
-        {
-            byte[] buffer = new byte[count];
-            if (fs.Read(buffer, 0, count) != count) throw new EndOfStreamException();
-            return buffer;
         }
 
         private static int HexToInt(string hex)

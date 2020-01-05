@@ -5,7 +5,7 @@ using System.Text;
 
 namespace LanguageTool
 {
-    class LanguageFile
+    public class LanguageFile
     {
         private const string ref_signature = "LANG";
 

@@ -9,7 +9,8 @@ namespace LanguageTool
     public class Language
     {
         public string Name { get; private set; } // Max length = 0xFFF
-        public string[] Strings { get; private set; } // Max length = 0x3FFFE
+        public string RawName { get => Name.Replace(@"\\n", @"\n").Replace(@"\\t", @"\t").Replace(@"\\r", @"\r"); }
+        public string[] Strings { get; private set; }
 
         private Language(string name, int string_count)
         {
@@ -74,10 +75,41 @@ namespace LanguageTool
         {
             string ret = new string(' ', offset * 2) + "{\n";
             string ofs = new string(' ', (offset + 1) * 2);
-            ret += $"{ofs}\"Name\": \"{Name.Replace("\n", @"\n").Replace("\t", @"\t").Replace("\r", @"\r")}\"\n";
+            ret += $"{ofs}\"Name\": \"{RawName}\"\n";
             ret += new string(' ', offset * 2) + '}';
 
             return ret;
+        }
+
+        public void exportAsTxt(string output_file)
+        {
+            using StreamWriter sw = new StreamWriter(new FileStream(output_file, FileMode.Create, FileAccess.ReadWrite));
+
+            foreach (string s in Strings)
+            {
+                sw.WriteLine(s.Replace("\n", @"\n").Replace("\t", @"\t").Replace("\r", @"\r"));
+            }
+        }
+
+        public static Language Parse(string file_name, string name, int string_count)
+        {
+
+            if (name.Length > 0xFFF)
+                throw new InvalidDataException("Language name too long.");
+
+            Language language = new Language(name, string_count);
+
+            using StreamReader sr = new StreamReader(new FileStream(file_name, FileMode.Open, FileAccess.Read));
+
+            for (int i = 0; i < string_count; ++i)
+            {
+                language.Strings[i] = sr.ReadLine();
+
+                if (language.Strings[i].Length > 0xFFF)
+                    throw new InvalidDataException("Language name too long.");
+            }
+
+            return language;
         }
     }
 }
