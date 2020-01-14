@@ -1,24 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using Tools.Models.Common;
 
 namespace LanguageTool
 {
     public class Language
     {
-        public string Name { get; private set; } // Max length = 0xFFF
-        public string RawName { get => Name.Replace(@"\\n", @"\n").Replace(@"\\t", @"\t").Replace(@"\\r", @"\r"); }
-        public string[] Strings { get; private set; }
+        public string Name { get; set; }
+        public string[] Strings { get; set; }
 
-        private Language(string name, int string_count)
-        {
-            Name = name;
-            Strings = new string[string_count];
-        }
-
-        public static Language Parse(Stream stream, int string_count)
+        #region Constructors
+        public Language(Stream stream, int string_count)
         {
             long origin = stream.Position;
 
@@ -30,7 +26,8 @@ namespace LanguageTool
 
             BinaryReader header = new BinaryReader(new MemoryStream(br.ReadBytes(header_length - 4)));
 
-            Language language = new Language(Encoding.UTF8.GetString(br.ReadBytes(name_length)), string_count);
+            Name = Encoding.UTF8.GetString(br.ReadBytes(name_length));
+            Strings = new string[string_count];
 
             for (int i = 0, offset, length; i < string_count; ++i)
             {
@@ -39,77 +36,68 @@ namespace LanguageTool
                 length = (int)(buffer & 0xFFF);
 
                 stream.Position = origin + offset;
-                language.Strings[i] = Encoding.UTF8.GetString(br.ReadBytes(length));
+                Strings[i] = Encoding.UTF8.GetString(br.ReadBytes(length));
             }
-
-            return language;
         }
 
-        public long WriteToStream(Stream stream)
+        public Language(FileInfo fileInfo, string name, int string_count)
         {
-            long origin = stream.Position;
+            Name = name;
+            Strings = new string[string_count];
 
-            BinaryWriter bw = new BinaryWriter(stream);
+            using StreamReader sr = new StreamReader(fileInfo.OpenRead());
 
-            int header_length = (Strings.Length + 1) * 4;
-            byte[] name_b = Encoding.UTF8.GetBytes(Name);
-
-            uint buffer = (uint)(header_length << 12) + (uint)name_b.Length;
-            bw.Write(buffer);
-
-            int n = Strings.Length;
-            for (int i = 0, offset = header_length + name_b.Length; i < n; ++i)
-            {
-                buffer = (uint)(offset << 12) + (uint)Strings[i].Length;
-                bw.Write(buffer);
-                offset += Strings[i].Length;
-            }
-            bw.Write(name_b);
-            for (int i = 0; i < n; ++i)
-                bw.Write(Encoding.UTF8.GetBytes(Strings[i]));
-
-            return stream.Position - origin;
+            for (int i = 0; i < string_count; ++i)
+                Strings[i] = sr.ReadLine().Replace(@"\n", "\n").Replace(@"\t", "\t").Replace(@"\r", "\r"); ;
         }
+        #endregion
 
         public string toJson(int offset = 0)
         {
             string ret = new string(' ', offset * 2) + "{\n";
             string ofs = new string(' ', (offset + 1) * 2);
-            ret += $"{ofs}\"Name\": \"{RawName}\"\n";
+            ret += $"{ofs}\"Name\": \"{Name.AsSafe()}\"\n";
             ret += new string(' ', offset * 2) + '}';
 
             return ret;
         }
 
-        public void exportAsTxt(string output_file)
+        public void exportAsTxt(FileInfo output_file)
         {
-            using StreamWriter sw = new StreamWriter(new FileStream(output_file, FileMode.Create, FileAccess.ReadWrite));
+            using StreamWriter sw = new StreamWriter(output_file.Create());
 
             foreach (string s in Strings)
-            {
                 sw.WriteLine(s.Replace("\n", @"\n").Replace("\t", @"\t").Replace("\r", @"\r"));
-            }
         }
 
-        public static Language Parse(string file_name, string name, int string_count)
+        public BrokenRules Validate(int expected_string_count)
         {
+            BrokenRules brokenRules = new BrokenRules();
 
-            if (name.Length > 0xFFF)
-                throw new InvalidDataException("Language name too long.");
+            if (string.IsNullOrEmpty(Name))
+                brokenRules.Add(new BrokenRule("Language name is null or empty!", this));
+            
+            if (Strings == null)
+                brokenRules.Add(new BrokenRule("Strings undefined!", this));
 
-            Language language = new Language(name, string_count);
+            if (brokenRules.Any())
+                return brokenRules;
 
-            using StreamReader sr = new StreamReader(new FileStream(file_name, FileMode.Open, FileAccess.Read));
+            if (Encoding.UTF8.GetByteCount(Name) > 0xFFF)
+                brokenRules.Add(new BrokenRule("Language name too long!", this));
 
-            for (int i = 0; i < string_count; ++i)
+            if (Strings.Length != expected_string_count)
+                brokenRules.Add(new BrokenRule($"String count ({Strings.Length}) != expected ({expected_string_count})", this));
+
+            for (int i = 0; i < Strings.Length; ++i)
             {
-                language.Strings[i] = sr.ReadLine();
-
-                if (language.Strings[i].Length > 0xFFF)
-                    throw new InvalidDataException("Language name too long.");
+                if (string.IsNullOrEmpty(Strings[i]))
+                    brokenRules.Add(new BrokenRule($"String {i} is null or empty!", this));
+                else if (Encoding.UTF8.GetByteCount(Strings[i]) > 0xFFF)
+                    brokenRules.Add(new BrokenRule($"String {i} too long!", this));
             }
 
-            return language;
+            return brokenRules;
         }
     }
 }

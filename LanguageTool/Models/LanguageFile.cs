@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using Tools.Models.Common;
 
 namespace LanguageTool
 {
@@ -9,90 +10,43 @@ namespace LanguageTool
     {
         private const string ref_signature = "LANG";
 
-        public byte[] Signature { get; private set; }
-        public int StringCount { get; private set; }
+        public byte[] Signature { get; set; }
+        public int StringCount { get; set; }
         public Language[] Languages { get; set; }
 
-
-        private LanguageFile(int string_count, int language_count)
+        public LanguageFile()
         {
-            Signature = Encoding.UTF8.GetBytes(ref_signature);
-            StringCount = string_count;
-            Languages = new Language[language_count];
         }
 
-        public static LanguageFile Parse(Stream stream)
+        public LanguageFile(Stream stream)
         {
             long origin = stream.Position;
 
             BinaryReader br = new BinaryReader(stream);
 
             #region Header (8 bytes)
-            byte[] buffer = br.ReadBytes(4);
-            if (Encoding.UTF8.GetString(buffer) != ref_signature)
+            Signature = br.ReadBytes(4);
+            if (Encoding.UTF8.GetString(Signature) != ref_signature)
                 throw new InvalidDataException("Wrong Signature");
 
-            buffer = br.ReadBytes(4);
-            int string_count = (buffer[2] << 16) + (buffer[1] << 8) + buffer[0] - 1,
-                lang_count = buffer[3];
+            int buffer = br.ReadInt32();
+            StringCount = (buffer & 0xFFFFFF) - 1;
+            int lang_count = buffer >> 24;
             #endregion
 
-            LanguageFile languageFile = new LanguageFile(string_count, lang_count);
+            Languages = new Language[lang_count];
 
-            byte[] offsets = br.ReadBytes(lang_count * 4);
+            BinaryReader offsets = new BinaryReader(new MemoryStream(br.ReadBytes(lang_count * 4)));
 
             for (int i = 0, offset; i < lang_count; ++i)
             {
-                offset = (offsets[4 * i + 3] << 24) + (offsets[4 * i + 2] << 16) + (offsets[4 * i + 1] << 8) + offsets[4 * i];
+                offset = offsets.ReadInt32();
                 if (offset != 0)
                 {
                     stream.Position = offset + origin;
-                    languageFile.Languages[i] = Language.Parse(stream, string_count);
+                    Languages[i] = new Language(stream, StringCount);
                 }
             }
-
-            return languageFile;
-        }
-
-        public long WriteToStream(Stream stream)
-        {
-            long origin = stream.Position;
-
-            BinaryWriter bw = new BinaryWriter(stream);
-
-            bw.Write(Signature);
-
-            int string_count = StringCount + 1,
-                lang_count = Languages.Length;
-            
-            byte[] buffer = new byte[4];
-            buffer[0] = (byte)string_count;
-            buffer[1] = (byte)(string_count >> 8);
-            buffer[2] = (byte)(string_count >> 16);
-            buffer[3] = (byte)lang_count;
-            bw.Write(buffer);
-
-            long offset = 8 + lang_count * 4,
-                 old_pos;
-
-            for (int i = 0; i < lang_count; ++i)
-            {
-                if (Languages[i] == null)
-                    bw.Write(0);
-                else
-                {
-                    bw.Write((int)offset);
-
-                    old_pos = stream.Position;
-
-                    stream.Position = offset + origin;
-                    offset += Languages[i].WriteToStream(stream);
-
-                    stream.Position = old_pos;
-                }
-            }
-
-            return stream.Position - origin;
         }
 
         public string toJson(int offset = 0)
@@ -117,6 +71,20 @@ namespace LanguageTool
             ret += new string(' ', offset * 2) + '}';
 
             return ret;
+        }
+
+        public BrokenRules Validate()
+        {
+            BrokenRules brokenRules = new BrokenRules();
+
+            if (Encoding.UTF8.GetString(Signature) != ref_signature)
+                brokenRules.Add(new BrokenRule("Signature invalid!"));
+
+            foreach (Language lang in Languages)
+                if (lang != null)
+                    brokenRules.AddRange(lang.Validate(StringCount));
+
+            return brokenRules;
         }
     }
 }

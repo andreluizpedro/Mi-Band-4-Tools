@@ -5,7 +5,9 @@ VisualStudioVersion = 16.0.29613.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "FontTool", "FontTool\FontTool.csproj", "{E694C8B9-7E85-4DF9-A419-386731281C1F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanguageTool", "LanguageTool\LanguageTool.csproj", "{E3971ED3-436F-4F34-998C-5AAC27DFE382}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LanguageTool", "LanguageTool\LanguageTool.csproj", "{E3971ED3-436F-4F34-998C-5AAC27DFE382}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tools.Models", "Tools.Models\Tools.Models.csproj", "{605BF361-D53C-4792-B1C0-A0A17E3BA61A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{E3971ED3-436F-4F34-998C-5AAC27DFE382}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E3971ED3-436F-4F34-998C-5AAC27DFE382}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E3971ED3-436F-4F34-998C-5AAC27DFE382}.Release|Any CPU.Build.0 = Release|Any CPU
+		{605BF361-D53C-4792-B1C0-A0A17E3BA61A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{605BF361-D53C-4792-B1C0-A0A17E3BA61A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{605BF361-D53C-4792-B1C0-A0A17E3BA61A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{605BF361-D53C-4792-B1C0-A0A17E3BA61A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
